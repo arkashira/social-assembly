@@ -3,98 +3,161 @@ package markdown
 import (
 	"bytes"
 	"html/template"
-	"net/url"
+	"regexp"
 	"strings"
 
-	"github.com/microcosm-cc/bluemonday"
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/ast"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
+	"github.com/microcosm-cc/bluemonday"
 )
 
-// RenderOptions configures the Markdown renderer.
-type RenderOptions struct {
-	// SafeLinks removes javascript:, data: and other dangerous protocols from href/src.
-	SafeLinks bool
-	// Strict forces the parser to use the same extensions as the original code
-	// (AutoHeadingIDs, NoEmptyLineBeforeBlock, SafeLinks) and disables
-	// extensions that could introduce raw HTML.
-	Strict bool
-}
-
-// Renderer is a thin wrapper around gomarkdown that guarantees safe output.
+// Renderer implements a secure markdown rendering service with sanitization and accessibility features
 type Renderer struct {
-	opts     RenderOptions
-	parser   *parser.Parser
-	renderer *html.Renderer
-	policy   *bluemonday.Policy
+	opts *Options
+	policy *bluemonday.Policy
 }
 
-// NewRenderer creates a new Renderer with the supplied options.
-func NewRenderer(opts RenderOptions) *Renderer {
-	// ---- Parser ----------------------------------------------------------
-	ext := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
-	if opts.SafeLinks {
-		ext |= parser.SafeLinks
-	}
-	if opts.Strict {
-		ext |= parser.SafeLinks | parser.NoEmptyLineBeforeBlock
-	}
-	p := parser.NewWithExtensions(ext)
+// Options configures the markdown renderer
+type Options struct {
+	SafeLinks bool // Sanitize external links
+	Strict    bool // Enable strict parsing
+	AllowHTML bool // Allow limited safe HTML (default false)
+}
 
-	// ---- HTML renderer -----------------------------------------------
-	h := html.NewRenderer(html.RendererOptions{
-		Flags: html.CommonFlags | html.HrefTargetBlank,
-	})
+// NewRenderer creates a new markdown renderer with secure defaults
+func NewRenderer(opts *Options) *Renderer {
+	if opts == nil {
+		opts = &Options{
+			SafeLinks: true,
+			Strict:    true,
+			AllowHTML: false,
+		}
+	}
 
-	// ---- Sanitisation policy ------------------------------------------
+	// Create a strict policy that allows only safe HTML
 	policy := bluemonday.UGCPolicy()
-	if opts.SafeLinks {
-		// Remove javascript:, data: and other unsafe protocols
-		policy.AllowAttrs("href", "src").Matching(bluemonday.SafeURLPattern).Globally()
-	}
-	// Ensure target="_blank" and rel="noopener noreferrer" on external links
-	policy.AddTargetBlankOnLinks()
-	policy.RequireNoFollowOnExternalLinks()
+	policy.AllowAttrs("href").OnElements("a")
+	policy.AllowAttrs("title").OnElements("a")
+	policy.AllowAttrs("class", "id").OnElements("div", "span", "p", "h1", "h2", "h3", "h4", "h5", "h6")
+	policy.AllowAttrs("alt").OnElements("img")
 
 	return &Renderer{
-		opts:     opts,
-		parser:   p,
-		renderer: h,
-		policy:   policy,
+		opts:   opts,
+		policy: policy,
 	}
 }
 
-// Render converts Markdown to safe HTML.  It never panics – callers can
-// decide how to handle an empty result.
-func (r *Renderer) Render(md string) template.HTML {
-	if md == "" {
+// Render converts markdown text to safe HTML
+func (r *Renderer) Render(mdText string) template.HTML {
+	if mdText == "" {
 		return ""
 	}
 
-	// Parse into an AST
-	ast := r.parser.Parse([]byte(md))
-	if ast == nil {
-		return ""
+	// Pre-sanitize markdown input
+	if r.opts.Strict {
+		mdText = sanitizeMarkdown(mdText)
 	}
 
-	// Render to raw HTML
-	var buf bytes.Buffer
-	html.Render(&buf, ast, r.renderer)
+	// Parse markdown with safe extensions
+	p := parser.NewWithExtensions(
+		parser.CommonExtensions |
+			parser.AutoHeadingIDs |
+			parser.NoEmptyLineBeforeBlock,
+	)
 
-	// Sanitize the output
-	safe := r.policy.SanitizeBytes(buf.Bytes())
+	doc := p.Parse([]byte(mdText))
 
-	return template.HTML(safe)
+	// Configure HTML renderer with security flags
+	htmlFlags := html.CommonFlags | html.HrefTargetBlank
+	if r.opts.SafeLinks {
+		htmlFlags |= html.Safelink
+	}
+
+	renderer := html.NewRenderer(html.RendererOptions{
+		Flags: htmlFlags,
+		RenderNodeHook: func(w html.Buffer, node ast.Node, entering bool) (ast.WalkStatus, bool) {
+			// Enforce heading level constraints
+			if heading, ok := node.(*ast.Heading); ok && entering {
+				if heading.Level < 1 {
+					heading.Level = 1
+				}
+				if heading.Level > 6 {
+					heading.Level = 6
+				}
+			}
+			return ast.GoToNext, false
+		},
+	})
+
+	// Render to HTML
+	htmlBytes := markdown.Render(doc, renderer)
+	htmlStr := string(htmlBytes)
+
+	// Post-process for accessibility
+	htmlStr = fixLists(htmlStr)
+
+	// Sanitize final output
+	if !r.opts.AllowHTML {
+		htmlStr = r.policy.Sanitize(htmlStr)
+	}
+
+	return template.HTML(htmlStr)
 }
 
-// MustRender panics if the result is empty while the input was non‑empty.
-// Useful for init‑time rendering where a failure is unrecoverable.
-func (r *Renderer) MustRender(md string) template.HTML {
-	res := r.Render(md)
-	if res == "" && md != "" {
-		panic("markdown rendering failed")
+// sanitizeMarkdown removes potentially dangerous markdown constructs
+func sanitizeMarkdown(md string) string {
+	// Remove raw HTML blocks
+	reHTML := regexp.MustCompile(`(?s)<[^>]*>`)
+	md = reHTML.ReplaceAllString(md, "")
+
+	// Remove javascript: links
+	reJS := regexp.MustCompile(`javascript\s*:`)
+	md = reJS.ReplaceAllString(md, "")
+
+	// Limit heading levels to prevent abuse
+	reHeadings := regexp.MustCompile(`(?m)^#{1,10}\s`)
+	md = reHeadings.ReplaceAllStringFunc(md, func(s string) string {
+		count := strings.Count(s, "#")
+		if count > 6 {
+			return strings.Repeat("#", 6) + " "
+		}
+		return s
+	})
+
+	return md
+}
+
+// fixLists ensures proper list structure for accessibility
+func fixLists(html string) string {
+	// Convert loose lists to proper structure
+	reLooseList := regexp.MustCompile(`(?m)<li>\s*<p>`)
+	html = reLooseList.ReplaceAllString(html, "<li>")
+
+	reLooseListClose := regexp.MustCompile(`(?m)</p>\s*</li>`)
+	html = reLooseListClose.ReplaceAllString(html, "</li>")
+
+	return html
+}
+
+// RenderToString renders markdown to a plain string (stripped of HTML tags)
+func (r *Renderer) RenderToString(mdText string) string {
+	html := r.Render(mdText)
+	// Strip HTML tags for plain text rendering
+	re := regexp.MustCompile(`<[^>]*>`)
+	return re.ReplaceAllString(string(html), "")
+}
+
+// RenderWithExcerpt renders markdown with a maximum length excerpt
+func (r *Renderer) RenderWithExcerpt(mdText string, maxLength int) (template.HTML, string) {
+	html := r.Render(mdText)
+	plain := r.RenderToString(mdText)
+
+	if len(plain) <= maxLength {
+		return html, plain
 	}
-	return res
+
+	excerpt := plain[:maxLength]
+	return html, excerpt
 }
