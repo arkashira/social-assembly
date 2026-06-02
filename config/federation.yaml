@@ -1,0 +1,125 @@
+# ------------------------------------------------------------------
+# Federation configuration for ActivityPub integration
+# ------------------------------------------------------------------
+# 1. General federation settings
+# 2. Outbound delivery policy
+# 3. Inbound verb & size limits
+# 4. Actor definitions (local & known remotes)
+# 5. Logging & monitoring
+# 6. Admin‑UI visibility
+# 7. Validation rules (enforced at startup)
+# ------------------------------------------------------------------
+federation:
+  # Global toggle – set to false to disable all federation traffic
+  enabled: true
+
+  # Public domain / base URL of this instance
+  domain: "example.com"
+
+  # Public URL of the main actor (e.g. the “instance” actor)
+  actor_id: "https://example.com/users/instance"
+
+  # PEM‑encoded RSA key pair used for HTTP signatures
+  private_key: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEowIBAAKCAQEA...
+    -----END RSA PRIVATE KEY-----
+  public_key: |
+    -----BEGIN PUBLIC KEY-----
+    MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...
+    -----END PUBLIC KEY-----
+
+# ------------------------------------------------------------------
+# Outbound delivery configuration
+# ------------------------------------------------------------------
+outbound:
+  # Maximum number of concurrent outbound deliveries
+  concurrency: 10
+
+  # Retry policy – exponential back‑off
+  retry:
+    attempts: 5
+    base_delay_seconds: 30
+    max_delay_seconds: 300
+
+  # HTTP request timeout (seconds)
+  timeout_seconds: 15
+
+# ------------------------------------------------------------------
+# Inbound handling configuration
+# ------------------------------------------------------------------
+inbound:
+  # Activity verbs that the server will accept
+  accepted_verbs:
+    - Create
+    - Delete
+    - Follow
+    - Accept
+    - Reject
+    - Like
+    - Announce
+    - Undo
+    - Block
+    - Announce
+
+  # Maximum size of inbound activity payload (bytes)
+  max_payload_bytes: 10485760   # 10 MB
+
+# ------------------------------------------------------------------
+# Actor definitions
+# ------------------------------------------------------------------
+actors:
+  # Local actors – one per user or service account
+  - name: "instance"
+    type: "Application"
+    inbox: "/inbox"
+    outbox: "/outbox"
+    followers: "/followers"
+    following: "/following"
+
+  # Example of a local “admin” actor
+  - name: "admin"
+    type: "Person"
+    inbox: "/admin/inbox"
+    outbox: "/admin/outbox"
+    followers: "/admin/followers"
+    following: "/admin/following"
+
+# Known remote actors (optional – speeds up lookup & verification)
+remotes:
+  - host: "mastodon.social"
+    actor_url: "https://mastodon.social/users/instance"
+  - host: "joinpeertube.org"
+    actor_url: "https://joinpeertube.org/users/instance"
+
+# ------------------------------------------------------------------
+# Logging & monitoring
+# ------------------------------------------------------------------
+logging:
+  level: "INFO"                         # debug | info | warning | error
+  format: "%(asctime)s %(levelname)s %(message)s"
+  delivery_log_path: "/var/log/social-assembly/federation_deliveries.log"
+
+# ------------------------------------------------------------------
+# Admin‑UI visibility
+# ------------------------------------------------------------------
+admin_ui:
+  # Show federation delivery status in the admin dashboard
+  show_delivery_status: true
+
+# ------------------------------------------------------------------
+# Validation rules (enforced by the application loader)
+# ------------------------------------------------------------------
+validation:
+  # Regex to ensure the public URL is HTTPS
+  public_url_regex: "^https://.+$"
+
+  # Actor ID must be a valid HTTPS URL
+  actor_id_regex: "^https://.+$"
+
+  # PEM format checks for keys
+  private_key_regex: "^-----BEGIN RSA PRIVATE KEY-----.*-----END RSA PRIVATE KEY-----$"
+  public_key_regex: "^-----BEGIN PUBLIC KEY-----.*-----END PUBLIC KEY-----$"
+
+  # Optional: enforce that the domain matches the public URL
+  domain_matches_public_url: true
