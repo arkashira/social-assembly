@@ -1,0 +1,1 @@
+   docker compose config   # prints the fully‑expanded config, catches syntax errors
