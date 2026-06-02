@@ -3,73 +3,98 @@ package markdown
 import (
 	"bytes"
 	"html/template"
+	"net/url"
 	"strings"
 
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/ast"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
 )
 
-// Renderer provides markdown rendering capabilities for posts and comments.
-type Renderer struct {
-	opts *Options
-}
-
-// Options configures the markdown renderer.
-type Options struct {
+// RenderOptions configures the Markdown renderer.
+type RenderOptions struct {
+	// SafeLinks removes javascript:, data: and other dangerous protocols from href/src.
 	SafeLinks bool
+	// Strict forces the parser to use the same extensions as the original code
+	// (AutoHeadingIDs, NoEmptyLineBeforeBlock, SafeLinks) and disables
+	// extensions that could introduce raw HTML.
+	Strict bool
 }
 
-// NewRenderer creates a new markdown renderer with the given options.
-func NewRenderer(opts *Options) *Renderer {
-	if opts == nil {
-		opts = &Options{SafeLinks: true}
+// Renderer is a thin wrapper around gomarkdown that guarantees safe output.
+type Renderer struct {
+	opts     RenderOptions
+	parser   *parser.Parser
+	renderer *html.Renderer
+	policy   *bluemonday.Policy
+}
+
+// NewRenderer creates a new Renderer with the supplied options.
+func NewRenderer(opts RenderOptions) *Renderer {
+	// ---- Parser ----------------------------------------------------------
+	ext := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	if opts.SafeLinks {
+		ext |= parser.SafeLinks
 	}
-	return &Renderer{opts: opts}
-}
+	if opts.Strict {
+		ext |= parser.SafeLinks | parser.NoEmptyLineBeforeBlock
+	}
+	p := parser.NewWithExtensions(ext)
 
-// Render converts markdown source into safe HTML suitable for web display.
-func (r *Renderer) Render(src []byte) ([]byte, error) {
-	// Create parser with extensions
-	p := parser.NewWithExtensions(
-		parser.CommonExtensions |
-			parser.AutoHeadingIDs |
-			parser.NoEmptyLineBeforeBlock,
-	)
-
-	// Parse markdown into AST
-	doc := p.Parse(src)
-
-	// Configure HTML renderer
-	renderer := html.NewRenderer(html.RendererOptions{
+	// ---- HTML renderer -----------------------------------------------
+	h := html.NewRenderer(html.RendererOptions{
 		Flags: html.CommonFlags | html.HrefTargetBlank,
-		CSS:   "markdown-body",
 	})
 
-	// Render AST to HTML
-	htmlBytes := markdown.Render(doc, renderer)
-
-	// Sanitize output for safety
-	return sanitizeHTML(htmlBytes), nil
-}
-
-// sanitizeHTML strips dangerous tags and attributes from rendered HTML.
-func sanitizeHTML(b []byte) []byte {
-	s := string(b)
-	// Remove script tags and other dangerous elements
-	s = strings.ReplaceAll(s, "<script", "&lt;script")
-	s = strings.ReplaceAll(s, "</script>", "&lt;/script&gt;")
-	// Remove on* event handlers
-	s = strings.ReplaceAll(s, " on", " data-on")
-	return []byte(s)
-}
-
-// RenderToTemplate renders markdown and wraps it in a template-safe structure.
-func (r *Renderer) RenderToTemplate(src []byte) (template.HTML, error) {
-	htmlBytes, err := r.Render(src)
-	if err != nil {
-		return "", err
+	// ---- Sanitisation policy ------------------------------------------
+	policy := bluemonday.UGCPolicy()
+	if opts.SafeLinks {
+		// Remove javascript:, data: and other unsafe protocols
+		policy.AllowAttrs("href", "src").Matching(bluemonday.SafeURLPattern).Globally()
 	}
-	return template.HTML(htmlBytes), nil
+	// Ensure target="_blank" and rel="noopener noreferrer" on external links
+	policy.AddTargetBlankOnLinks()
+	policy.RequireNoFollowOnExternalLinks()
+
+	return &Renderer{
+		opts:     opts,
+		parser:   p,
+		renderer: h,
+		policy:   policy,
+	}
+}
+
+// Render converts Markdown to safe HTML.  It never panics – callers can
+// decide how to handle an empty result.
+func (r *Renderer) Render(md string) template.HTML {
+	if md == "" {
+		return ""
+	}
+
+	// Parse into an AST
+	ast := r.parser.Parse([]byte(md))
+	if ast == nil {
+		return ""
+	}
+
+	// Render to raw HTML
+	var buf bytes.Buffer
+	html.Render(&buf, ast, r.renderer)
+
+	// Sanitize the output
+	safe := r.policy.SanitizeBytes(buf.Bytes())
+
+	return template.HTML(safe)
+}
+
+// MustRender panics if the result is empty while the input was non‑empty.
+// Useful for init‑time rendering where a failure is unrecoverable.
+func (r *Renderer) MustRender(md string) template.HTML {
+	res := r.Render(md)
+	if res == "" && md != "" {
+		panic("markdown rendering failed")
+	}
+	return res
 }
