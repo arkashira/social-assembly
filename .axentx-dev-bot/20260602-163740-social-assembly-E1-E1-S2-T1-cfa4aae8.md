@@ -929,94 +929,106 @@ Additional suggestions for improvement:
 
 security WARN (findings=3)
 
-## qa — qa @ 2026-06-04T12:23:13.859981Z
+## qa — qa @ 2026-06-04T18:30:49.403889Z
 
-PASS: Test plan complete and addresses all reviewer comments.
-
----
-
-## 1. Acceptance Criteria  
-*(All criteria must be met for the feature to be considered done)*  
-
-| # | Criterion | Measurable Outcome |
-|---|-----------|--------------------|
-| AC‑1 | **Create post** with `title`, `body`, optional `media` URL | `POST /api/posts` returns **201** and JSON containing `id`, `title`, `body`, `media` (if supplied), `authorId`, `createdAt`. |
-| AC‑2 | **Input validation** – required fields, length limits, URL format | Missing/invalid fields cause **400** with an `errors` array describing each violation. |
-| AC‑3 | **Author attribution** – `authorId` matches the authenticated user | `authorId` in response equals `req.user.id`. |
-| AC‑4 | **Timestamp** – `createdAt` is set to the current UTC time (±5 s) | `createdAt` parsed as ISO‑8601 and differs from request time by ≤ 5 seconds. |
-| AC‑5 | **Edit window** – author can edit only within 5 minutes of creation | `PUT /api/posts/:id` succeeds (**200**) if `<5 min>` elapsed; otherwise returns **403** with “edit window expired”. |
-| AC‑6 | **Delete** – author or a user with role `moderator` can delete | `DELETE /api/posts/:id` returns **200** and marks the record `deletedAt` (soft delete). |
-| AC‑7 | **Soft‑delete preservation** – deleted posts remain queryable only via admin endpoint | Standard `GET /api/posts/:id` returns **404** for soft‑deleted posts; admin endpoint `GET /api/admin/posts/:id` returns the record with `deletedAt` populated. |
+PASS: Test plan approved.  
 
 ---
 
-## 2. Unit Tests (pseudo‑code, Jest style)
+## 1. Acceptance Criteria (measurable)
+
+| # | Criterion | Measurement |
+|---|-----------|-------------|
+| 1 | **Create** a post with `title`, `body`, and optional `media` (URL) | API returns 201 and JSON containing `id`, `title`, `body`, `media`, `authorId`, `createdAt`. |
+| 2 | **Validation** rejects missing required fields | API returns 400 with error messages for each missing field. |
+| 3 | **Validation** rejects `title` > 255 chars or `body` > 10,000 chars | API returns 400 with appropriate error. |
+| 4 | **Validation** rejects `media` if not a valid URL | API returns 400. |
+| 5 | **Author** is stored correctly | `authorId` in response matches authenticated user. |
+| 6 | **Timestamp** is set to current UTC | `createdAt` is within ±5 seconds of request time. |
+| 7 | **Database** persistence | Post can be retrieved by its `id` and matches payload. |
+
+---
+
+## 2. Unit Tests (pseudo‑code, Jest)
 
 ```js
-// tests/unit/post.controller.test.js
-const { createPost, editPost, deletePost } = require('../../backend/routes/post');
+// tests/unit/postController.test.js
+const { createPost } = require('../../backend/routes/post');
 const Post = require('../../backend/models/Post');
 const { mockRequest, mockResponse } = require('../utils/mockExpress');
 
 jest.mock('../../backend/models/Post');
 
-describe('Post Controller – Unit', () => {
+describe('POST /posts - createPost', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  // ---------- CREATE ----------
-  test('POST /posts – success (valid payload)', async () => {
+  test('returns 201 and post data on valid input', async () => {
     const req = mockRequest({
       body: { title: 'Hello', body: 'World', media: 'https://example.com/img.png' },
-      user: { id: 7 }
+      user: { id: 42 }
     });
     const res = mockResponse();
 
-    const saved = { id: 1, title: 'Hello', body: 'World', media: 'https://example.com/img.png',
-                   authorId: 7, createdAt: new Date() };
-    Post.create.mockResolvedValue(saved);
+    const fakePost = { id: 1, title: 'Hello', body: 'World', media: 'https://example.com/img.png', authorId: 42, createdAt: new Date() };
+    Post.create.mockResolvedValue(fakePost);
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith(saved);
+    expect(res.json).toHaveBeenCalledWith(fakePost);
   });
 
-  test('POST /posts – fails when title missing', async () => {
-    const req = mockRequest({ body: { body: 'No title' }, user: { id: 1 } });
+  test('rejects missing title', async () => {
+    const req = mockRequest({ body: { body: 'text' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({
-      errors: expect.arrayContaining(['title is required'])
-    });
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title is required']) });
   });
 
-  test('POST /posts – fails when title >255 chars', async () => {
-    const longTitle = 'a'.repeat(256);
-    const req = mockRequest({ body: { title: longTitle, body: 'text' }, user: { id: 1 } });
+  test('rejects title longer than 255 chars', async () => {
+    const long = 'a'.repeat(256);
+    const req = mockRequest({ body: { title: long, body: 'text' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({
-      errors: expect.arrayContaining(['title must be ≤ 255 characters'])
-    });
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title must be <= 255 chars']) });
   });
 
-  test('POST /posts – fails when media is not a URL', async () => {
-    const req = mockRequest({
-      body: { title: 'T', body: 'B', media: 'not-a-url' },
-      user: { id: 1 }
-    });
+  test('rejects non‑URL media', async () => {
+    const req = mockRequest({ body: { title: 't', body: 'b', media: 'not-a-url' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({
-      errors: expect.arrayContaining(['media must be a valid URL'])
-    });
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['media must be a valid URL']) });
+  });
+});
+```
 
+---
+
+## 3. Integration Tests
+
+| Test | Scenario | Expected Result |
+|------|----------|-----------------|
+| **Happy Path 1** | Authenticated user posts with title, body, media | 201, post stored, retrievable via GET `/posts/:id` |
+| **Happy Path 2** | Authenticated user posts with title & body only | 201, `media` null |
+| **Happy Path 3** | Multiple users create posts concurrently | All posts exist, no data loss |
+| **Edge 1** | Title exactly 255 chars | 201, accepted |
+| **Edge 2** | Body exactly 10,000 chars | 201, accepted |
+| **Edge 3** | Media omitted | 201, `media` null |
+| **Edge 4** | Media URL with query params | 201, accepted |
+| **Failure 1** | Unauthenticated request | 401 Unauthorized |
+| **Failure 2** | Body missing | 400 with error |
+| **Failure 3** | Media not a URL | 400 with error |
+
+*Implementation notes:*  
+- Use a test database (SQLite in-memory or Dockerized Postgres).  
+- Seed users via `/auth/login` or mock JWT.  
+- Verify timestamps within ±5
