@@ -929,9 +929,9 @@ Additional suggestions for improvement:
 
 security WARN (findings=3)
 
-## qa — qa @ 2026-06-04T06:11:02.095482Z
+## qa — qa @ 2026-06-04T09:43:43.498020Z
 
-PASS: Full TDD‑style test plan for the “post creation API” feature.
+PASS: Test plan approved.  
 
 ---
 
@@ -939,18 +939,17 @@ PASS: Full TDD‑style test plan for the “post creation API” feature.
 
 | # | Criterion | Measurement |
 |---|-----------|-------------|
-| 1 | **Create** a post with `title`, `body`, and optional `media` | API returns HTTP 201 with JSON containing `id`, `title`, `body`, `media`, `authorId`, `createdAt`. |
-| 2 | **Validation – required fields** | Missing `title` or `body` → HTTP 400 with error messages. |
-| 3 | **Validation – length limits** | `title` > 255 chars or `body` > 10 000 chars → HTTP 400. |
-| 4 | **Validation – media URL** | Non‑URL `media` → HTTP 400. |
-| 5 | **Author assignment** | `authorId` in response equals authenticated user’s ID. |
-| 6 | **Timestamp** | `createdAt` is within ±2 seconds of request time. |
-| 7 | **Persistence** | Post can be retrieved by its `id` and matches supplied data. |
-| 8 | **Soft‑delete flag** | Newly created post has `deletedAt` = null. |
+| 1 | **Create** a post with `title`, `body`, and optional `media` (URL) | API returns 201 and JSON containing `id`, `title`, `body`, `media`, `authorId`, `createdAt`. |
+| 2 | **Validation** rejects missing required fields | API returns 400 with error messages for each missing field. |
+| 3 | **Validation** rejects `title` > 255 chars or `body` > 10,000 chars | API returns 400 with appropriate error. |
+| 4 | **Validation** rejects `media` if not a valid URL | API returns 400. |
+| 5 | **Author** is stored correctly | `authorId` in response matches authenticated user. |
+| 6 | **Timestamp** is set to current UTC | `createdAt` is within ±5 seconds of request time. |
+| 7 | **Database** persistence | Post can be retrieved by its `id` and matches payload. |
 
 ---
 
-## 2. Unit Tests (pseudo‑code – Jest)
+## 2. Unit Tests (pseudo‑code, Jest)
 
 ```js
 // tests/unit/postController.test.js
@@ -960,28 +959,17 @@ const { mockRequest, mockResponse } = require('../utils/mockExpress');
 
 jest.mock('../../backend/models/Post');
 
-describe('POST /posts – createPost', () => {
+describe('POST /posts - createPost', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  const validPayload = {
-    title: 'Hello World',
-    body: 'This is a test post.',
-    media: 'https://example.com/image.png',
-  };
-
-  const mockUser = { id: 42, username: 'alice' };
-
   test('returns 201 and post data on valid input', async () => {
-    const req = mockRequest({ body: validPayload, user: mockUser });
+    const req = mockRequest({
+      body: { title: 'Hello', body: 'World', media: 'https://example.com/img.png' },
+      user: { id: 42 }
+    });
     const res = mockResponse();
 
-    const fakePost = {
-      id: 1,
-      ...validPayload,
-      authorId: mockUser.id,
-      createdAt: new Date(),
-      deletedAt: null,
-    };
+    const fakePost = { id: 1, title: 'Hello', body: 'World', media: 'https://example.com/img.png', authorId: 42, createdAt: new Date() };
     Post.create.mockResolvedValue(fakePost);
 
     await createPost(req, res);
@@ -991,67 +979,56 @@ describe('POST /posts – createPost', () => {
   });
 
   test('rejects missing title', async () => {
-    const req = mockRequest({ body: { body: 'text' }, user: mockUser });
+    const req = mockRequest({ body: { body: 'text' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ errors: expect.arrayContaining(['title is required']) })
-    );
-  });
-
-  test('rejects missing body', async () => {
-    const req = mockRequest({ body: { title: 'Hi' }, user: mockUser });
-    const res = mockResponse();
-
-    await createPost(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ errors: expect.arrayContaining(['body is required']) })
-    );
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title is required']) });
   });
 
   test('rejects title longer than 255 chars', async () => {
-    const req = mockRequest({
-      body: { title: 'a'.repeat(256), body: 'text' },
-      user: mockUser,
-    });
+    const long = 'a'.repeat(256);
+    const req = mockRequest({ body: { title: long, body: 'text' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ errors: expect.arrayContaining(['title must be <= 255 chars']) })
-    );
-  });
-
-  test('rejects body longer than 10k chars', async () => {
-    const req = mockRequest({
-      body: { title: 'Hi', body: 'b'.repeat(10001) },
-      user: mockUser,
-    });
-    const res = mockResponse();
-
-    await createPost(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ errors: expect.arrayContaining(['body must be <= 10000 chars']) })
-    );
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title must be <= 255 chars']) });
   });
 
   test('rejects non‑URL media', async () => {
-    const req = mockRequest({
-      body: { title: 'Hi', body: 'text', media: 'not-a-url' },
-      user: mockUser,
-    });
+    const req = mockRequest({ body: { title: 't', body: 'b', media: 'not-a-url' }, user: { id: 1 } });
     const res = mockResponse();
 
     await createPost(req, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(
+    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['media must be a valid URL']) });
+  });
+});
+```
+
+---
+
+## 3. Integration Tests
+
+| Test | Scenario | Expected Result |
+|------|----------|-----------------|
+| **Happy Path 1** | Authenticated user posts with title, body, media | 201, post stored, retrievable via GET `/posts/:id` |
+| **Happy Path 2** | Authenticated user posts with title & body only | 201, `media` null |
+| **Happy Path 3** | Multiple users create posts concurrently | All posts exist, no data loss |
+| **Edge 1** | Title exactly 255 chars | 201, accepted |
+| **Edge 2** | Body exactly 10,000 chars | 201, accepted |
+| **Edge 3** | Media omitted | 201, `media` null |
+| **Edge 4** | Media URL with query params | 201, accepted |
+| **Failure 1** | Unauthenticated request | 401 Unauthorized |
+| **Failure 2** | Body missing | 400 with error |
+| **Failure 3** | Media not a URL | 400 with error |
+
+*Implementation notes:*  
+- Use a test database (SQLite in-memory or Dockerized Postgres).  
+- Seed users via `/auth/login` or mock JWT.  
+- Verify timestamps within ±5
