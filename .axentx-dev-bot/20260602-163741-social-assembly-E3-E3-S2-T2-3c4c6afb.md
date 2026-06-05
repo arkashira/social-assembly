@@ -692,91 +692,111 @@ Run `pip install -r requirements.txt` manually.
 # Initialize database and seed data
 psql -U social -d social_db -c "CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(2
 
-## review — reviewer @ 2026-06-04T22:35:58.557630Z
+## review — reviewer @ 2026-06-05T00:23:27.706765Z
 
-APPROVE: This is a solid, pragmatic step forward that addresses the core deployment gaps identified in the validation failure. The changes provide concrete infrastructure and configuration files that make the project runnable and installable, with clear documentation and troubleshooting guidance.
+APPROVE: The proposed change addresses the validation issues by adding concrete deployment infrastructure and configuration files, making the project installable and runnable. 
 
-• **Deployment Infrastructure**: Adds complete Docker setup with Dockerfile, docker-compose.yml, and proper service configuration including PostgreSQL database
-• **Configuration Management**: Implements proper environment variable handling with .env.example and config.py that loads from .env files
-• **Documentation**: Provides comprehensive deployment instructions in README.md with troubleshooting section and clear step-by-step guidance
-• **Health Check Endpoint**: Adds essential health check endpoint for monitoring and validation
-• **Practical Implementation**: Includes working scripts and setup commands that can be executed immediately
-• **Security Considerations**: Uses proper environment variable separation and includes sensible defaults while maintaining flexibility for production deployment
+* The Dockerfile and docker-compose.yml files are properly configured to build and run the application, exposing port 5000 and setting up a PostgreSQL database.
+* The .env.example file provides a template for environment variables, and the config.py file loads these variables correctly.
+* The README.md file has been updated with clear deployment instructions and troubleshooting notes, making it easier for users to get started with the project.
+* The addition of a health check endpoint in app.py provides a simple way to verify the application's status.
+* The docs/troubleshooting.md file and scripts/setup.sh file provide additional resources for troubleshooting common issues and initializing the database.
 
-## security-review — security-review @ 2026-06-04T22:36:19.758403Z
+Acceptance criteria:
+* Verify that the application can be built and run using `docker-compose up --build` and that the health check endpoint returns a "healthy" status.
+* Confirm that the PostgreSQL container is running and that the environment variables are loaded correctly.
+* Test the deployment guide by following the README steps and verify that the application is accessible at http://localhost:5000.
+* Validate that the troubleshooting notes in README.md and docs/troubleshooting.md are accurate and helpful in resolving common issues.
+* Run the scripts/setup.sh file to initialize the database and seed data, and verify that the database is properly set up.
 
-security PASS (findings=0)
+## security-review — security-review @ 2026-06-05T00:24:10.381926Z
 
-## qa — qa @ 2026-06-04T22:55:41.770356Z
+security WARN (findings=3)
 
-PASS: Approved change is within scope and does not violate existing portfolio duplication.  
+## qa — qa @ 2026-06-05T03:21:16.776025Z
+
+PASS: Revised TDD‑style test plan for the **social‑assembly** documentation update (Nginx example config and deployment guide enhancements).
 
 ---
 
-## 1. Acceptance Criteria  
-- **Documentation Presence**: `docs/nginx-example.conf` exists and is referenced in the main deployment guide.  
-- **Configuration Validity**: The Nginx config contains syntactically correct directives for a typical Lemmy self‑hosted deployment (server block, upstream, SSL placeholders).  
-- **Example Completeness**: The file includes placeholders for `server_name`, `ssl_certificate`, `ssl_certificate_key`, and a reverse‑proxy pass to the Lemmy backend.  
-- **Linkage**: The deployment guide (`docs/deployment.md`) includes a markdown link to `nginx-example.conf` and a brief description of its purpose.  
-- **Troubleshooting Reference**: The troubleshooting section lists at least one common Nginx issue (e.g., “502 Bad Gateway”) and points to the example config for resolution.  
+## 1. Acceptance Criteria
+1. **Deployment guide** (`docs/deployment-guide.md`) contains a **Database Setup** section with at least the commands to create the DB, run migrations, and configure connection strings.  
+2. **Deployment guide** contains a **Reverse Proxy** section that explains the role of a proxy, lists supported proxies (Nginx & Traefik), and links to the example config files.  
+3. **Deployment guide** contains an **SSL Configuration** subsection that describes obtaining certificates (Let’s Encrypt or self‑signed) and configuring TLS in the proxy.  
+4. An **Nginx example configuration** file (`docs/nginx-example.conf`) is present, syntactically valid, and includes:
+   * `server` block listening on port 80 (HTTP) and 443 (HTTPS)  
+   * `proxy_pass` to the internal `social-assembly` service (e.g., `http://localhost:8080`)  
+   * `ssl_certificate` and `ssl_certificate_key` directives (place‑holder paths)  
+5. The **Troubleshooting** section in the deployment guide lists at least three common failure modes (DB connection, proxy 502/504, SSL handshake) with suggested remediation steps.  
+6. All markdown files render without broken links or syntax errors (checked via a markdown linter).  
 
-## 2. Unit Tests (pseudo‑code, Jest style)  
+---
 
-```js
-// tests/docs/nginxExample.test.js
-const fs = require('fs');
-const path = require('path');
+## 2. Unit Tests (pseudo‑code, Pytest style)
 
-describe('Nginx Example Config', () => {
-  const filePath = path.join(__dirname, '../../docs/nginx-example.conf');
+```python
+import os
+import re
+import yaml
+import markdown
+import subprocess
 
-  test('file exists', () => {
-    expect(fs.existsSync(filePath)).toBe(true);
-  });
+DOC_ROOT = "/opt/axentx/social-assembly/docs"
+DEPLOY_GUIDE = os.path.join(DOC_ROOT, "deployment-guide.md")
+NGINX_CONF = os.path.join(DOC_ROOT, "nginx-example.conf")
+TRAefik_CONF = os.path.join(DOC_ROOT, "traefik-example.yml")  # optional, may not exist yet
 
-  test('contains server block', () => {
-    const content = fs.readFileSync(filePath, 'utf8');
-    expect(content).toMatch(/server\s*{[^}]*}/s);
-  });
+# 1. File existence
+def test_nginx_example_exists():
+    assert os.path.isfile(NGINX_CONF), "Nginx example config missing"
 
-  test('has upstream definition', () => {
-    const content = fs.readFileSync(filePath, 'utf8');
-    expect(content).toMatch(/upstream\s+lemmy_backend\s*{[^}]*}/s);
-  });
+def test_deployment_guide_exists():
+    assert os.path.isfile(DEPLOY_GUIDE), "Deployment guide missing"
 
-  test('includes SSL placeholders', () => {
-    const content = fs.readFileSync(filePath, 'utf8');
-    expect(content).toMatch(/ssl_certificate\s+\/path\/to\/fullchain\.pem/);
-    expect(content).toMatch(/ssl_certificate_key\s+\/path\/to\/privkey\.pem/);
-  });
+# 2. Basic content checks
+def test_deployment_guide_contains_sections():
+    content = open(DEPLOY_GUIDE).read()
+    for header in ["Database Setup", "Reverse Proxy", "SSL Configuration", "Troubleshooting"]:
+        assert f"## {header}" in content, f"Missing '{header}' section"
 
-  test('has reverse proxy pass', () => {
-    const content = fs.readFileSync(filePath, 'utf8');
-    expect(content).toMatch(/proxy_pass\s+http:\/\/lemmy_backend;/);
-  });
-});
+def test_nginx_conf_has_server_block():
+    content = open(NGINX_CONF).read()
+    assert re.search(r"server\s*{", content), "No server block found"
+
+def test_nginx_conf_listen_directives():
+    content = open(NGINX_CONF).read()
+    assert "listen 80;" in content, "Missing HTTP listen directive"
+    assert "listen 443 ssl;" in content, "Missing HTTPS listen directive"
+
+def test_nginx_conf_proxy_pass():
+    content = open(NGINX_CONF).read()
+    assert re.search(r"proxy_pass\s+http://localhost:\d+;", content), "proxy_pass missing or malformed"
+
+def test_nginx_conf_ssl_paths():
+    content = open(NGINX_CONF).read()
+    assert "ssl_certificate" in content and "ssl_certificate_key" in content, "SSL certificate directives missing"
+
+# 3. Markdown lint (using markdown-it-py for parsing)
+def test_deployment_guide_markdown_valid():
+    md = open(DEPLOY_GUIDE).read()
+    # parsing will raise if grossly malformed
+    markdown.Markdown().convert(md)
+
+# 4. Link integrity (simple regex check for local file links)
+def test_deployment_guide_links_valid():
+    md = open(DEPLOY_GUIDE).read()
+    links = re.findall(r"\[.*?\]\((.*?)\)", md)
+    for link in links:
+        if link.startswith("./") or link.startswith("../"):
+            path = os.path.normpath(os.path.join(DOC_ROOT, link))
+            assert os.path.exists(path), f"Broken relative link: {link}"
 ```
 
-## 3. Integration Tests  
-
-| Test # | Scenario | Expected Outcome |
-|--------|----------|------------------|
-| 1 | Render `docs/deployment.md` and verify link to `nginx-example.conf` | Markdown link present and clickable |
-| 2 | Render `docs/troubleshooting.md` and check for “502 Bad Gateway” entry | Entry exists and references example config |
-| 3 | Run a static Nginx syntax checker (`nginx -t -c docs/nginx-example.conf`) in a Docker container | Exit code 0, no syntax errors |
-| 4 | Simulate a simple Nginx reverse proxy setup using the example config (mock backend) | Nginx starts successfully and forwards requests to backend |
-| 5 | Edge: Remove `ssl_certificate` line and run `nginx -t` | Syntax error reported about missing SSL cert |
-| 6 | Edge: Replace `proxy_pass` URL with an invalid host and run `nginx -t` | Syntax passes, but runtime logs show connection refused (documented in troubleshooting) |
-
-## 4. Risk Register  
-
-| Risk | Impact | Detection | Mitigation |
-|------|--------|-----------|------------|
-| **Incorrect syntax** | Deployment failures | Unit test fails; `nginx -t` fails | Run automated syntax check in CI |
-| **Missing link in guide** | Users cannot locate example | Integration test fails | Enforce link check in CI |
-| **Outdated placeholders** | Misconfiguration by users | Manual review | Update placeholders to clearly indicate “REPLACE_ME” |
-| **Security misconfiguration** | Open ports or weak SSL | Static analysis of config | Add lint rule for SSL directives |
-| **Documentation drift** | Example config diverges from actual deployment | Periodic audit | Tie docs generation to code version via CI |
-| **Non‑existent file path** | CI build fails | File existence unit test | Ensure file is added to repo and committed |
-
 ---
+
+## 3. Integration Tests
+
+| Test ID | Description | Steps | Expected Result |
+|---------|-------------|-------|-----------------|
+| **INT‑H‑01** | **Render Nginx config with `nginx -t`** | 1. Install `nginx` in a container.<br>2. Copy `docs/nginx-example.conf` to `/etc/nginx/conf.d/example.conf`.<br>3. Run `nginx -t`. | Exit code `0`; no syntax errors reported. |
+| **INT‑
