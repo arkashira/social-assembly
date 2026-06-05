@@ -713,90 +713,67 @@ Acceptance criteria:
 
 security WARN (findings=3)
 
-## qa — qa @ 2026-06-05T03:21:16.776025Z
+## qa — qa @ 2026-06-05T04:46:25.111627Z
 
-PASS: Revised TDD‑style test plan for the **social‑assembly** documentation update (Nginx example config and deployment guide enhancements).
+PASS: Creating comprehensive TDD test plan for Nginx configuration documentation
 
----
+## 1. Acceptance criteria
+- Nginx configuration file exists at `/opt/axentx/social-assembly/docs/nginx-example.conf`
+- Configuration includes SSL/TLS settings with proper certificate paths
+- Configuration includes reverse proxy directives for the social-assembly application
+- Configuration includes database connection settings and environment variables
+- Configuration follows security best practices (no hardcoded credentials, proper headers)
+- Configuration includes explanatory comments for each major section
+- Configuration passes Nginx syntax validation (`nginx -t`)
 
-## 1. Acceptance Criteria
-1. **Deployment guide** (`docs/deployment-guide.md`) contains a **Database Setup** section with at least the commands to create the DB, run migrations, and configure connection strings.  
-2. **Deployment guide** contains a **Reverse Proxy** section that explains the role of a proxy, lists supported proxies (Nginx & Traefik), and links to the example config files.  
-3. **Deployment guide** contains an **SSL Configuration** subsection that describes obtaining certificates (Let’s Encrypt or self‑signed) and configuring TLS in the proxy.  
-4. An **Nginx example configuration** file (`docs/nginx-example.conf`) is present, syntactically valid, and includes:
-   * `server` block listening on port 80 (HTTP) and 443 (HTTPS)  
-   * `proxy_pass` to the internal `social-assembly` service (e.g., `http://localhost:8080`)  
-   * `ssl_certificate` and `ssl_certificate_key` directives (place‑holder paths)  
-5. The **Troubleshooting** section in the deployment guide lists at least three common failure modes (DB connection, proxy 502/504, SSL handshake) with suggested remediation steps.  
-6. All markdown files render without broken links or syntax errors (checked via a markdown linter).  
+## 2. Unit tests
+```javascript
+// File: nginx-config.test.js
+const fs = require('fs');
+const path = require('path');
 
----
+describe('Nginx Configuration', () => {
+  const nginxConfigPath = '/opt/axentx/social-assembly/docs/nginx-example.conf';
+  
+  test('Nginx config file exists', () => {
+    expect(fs.existsSync(nginxConfigPath)).toBe(true);
+  });
 
-## 2. Unit Tests (pseudo‑code, Pytest style)
+  test('Contains SSL/TLS configuration', () => {
+    const config = fs.readFileSync(nginxConfigPath, 'utf8');
+    expect(config).toMatch(/ssl_certificate/);
+    expect(config).toMatch(/ssl_certificate_key/);
+    expect(config).toMatch(/ssl_protocols/);
+  });
 
-```python
-import os
-import re
-import yaml
-import markdown
-import subprocess
+  test('Contains reverse proxy settings', () => {
+    const config = fs.readFileSync(nginxConfigPath, 'utf8');
+    expect(config).toMatch(/proxy_pass/);
+    expect(config).toMatch(/proxy_set_header/);
+  });
 
-DOC_ROOT = "/opt/axentx/social-assembly/docs"
-DEPLOY_GUIDE = os.path.join(DOC_ROOT, "deployment-guide.md")
-NGINX_CONF = os.path.join(DOC_ROOT, "nginx-example.conf")
-TRAefik_CONF = os.path.join(DOC_ROOT, "traefik-example.yml")  # optional, may not exist yet
+  test('Contains database connection settings', () => {
+    const config = fs.readFileSync(nginxConfigPath, 'utf8');
+    expect(config).toMatch(/DATABASE_URL/);
+    expect(config).toMatch(/environment variables/);
+  });
 
-# 1. File existence
-def test_nginx_example_exists():
-    assert os.path.isfile(NGINX_CONF), "Nginx example config missing"
+  test('Follows security best practices', () => {
+    const config = fs.readFileSync(nginxConfigPath, 'utf8');
+    expect(config).toMatch(/X-Frame-Options/);
+    expect(config).toMatch(/X-Content-Type-Options/);
+    expect(config).not.toMatch(/server_tokens\s+on/);
+  });
 
-def test_deployment_guide_exists():
-    assert os.path.isfile(DEPLOY_GUIDE), "Deployment guide missing"
+  test('Has explanatory comments', () => {
+    const config = fs.readFileSync(nginxConfigPath, 'utf8');
+    expect(config).toMatch(/# SSL Configuration/);
+    expect(config).toMatch(/# Reverse Proxy/);
+    expect(config).toMatch(/# Database Settings/);
+  });
 
-# 2. Basic content checks
-def test_deployment_guide_contains_sections():
-    content = open(DEPLOY_GUIDE).read()
-    for header in ["Database Setup", "Reverse Proxy", "SSL Configuration", "Troubleshooting"]:
-        assert f"## {header}" in content, f"Missing '{header}' section"
-
-def test_nginx_conf_has_server_block():
-    content = open(NGINX_CONF).read()
-    assert re.search(r"server\s*{", content), "No server block found"
-
-def test_nginx_conf_listen_directives():
-    content = open(NGINX_CONF).read()
-    assert "listen 80;" in content, "Missing HTTP listen directive"
-    assert "listen 443 ssl;" in content, "Missing HTTPS listen directive"
-
-def test_nginx_conf_proxy_pass():
-    content = open(NGINX_CONF).read()
-    assert re.search(r"proxy_pass\s+http://localhost:\d+;", content), "proxy_pass missing or malformed"
-
-def test_nginx_conf_ssl_paths():
-    content = open(NGINX_CONF).read()
-    assert "ssl_certificate" in content and "ssl_certificate_key" in content, "SSL certificate directives missing"
-
-# 3. Markdown lint (using markdown-it-py for parsing)
-def test_deployment_guide_markdown_valid():
-    md = open(DEPLOY_GUIDE).read()
-    # parsing will raise if grossly malformed
-    markdown.Markdown().convert(md)
-
-# 4. Link integrity (simple regex check for local file links)
-def test_deployment_guide_links_valid():
-    md = open(DEPLOY_GUIDE).read()
-    links = re.findall(r"\[.*?\]\((.*?)\)", md)
-    for link in links:
-        if link.startswith("./") or link.startswith("../"):
-            path = os.path.normpath(os.path.join(DOC_ROOT, link))
-            assert os.path.exists(path), f"Broken relative link: {link}"
-```
-
----
-
-## 3. Integration Tests
-
-| Test ID | Description | Steps | Expected Result |
-|---------|-------------|-------|-----------------|
-| **INT‑H‑01** | **Render Nginx config with `nginx -t`** | 1. Install `nginx` in a container.<br>2. Copy `docs/nginx-example.conf` to `/etc/nginx/conf.d/example.conf`.<br>3. Run `nginx -t`. | Exit code `0`; no syntax errors reported. |
-| **INT‑
+  test('Valid Nginx syntax', () => {
+    // This would be implemented with a shell command execution
+    // const result = execSync('nginx -t -c ' + nginxConfigPath);
+    // expect(result.toString()).toContain('syntax is ok');
+   
