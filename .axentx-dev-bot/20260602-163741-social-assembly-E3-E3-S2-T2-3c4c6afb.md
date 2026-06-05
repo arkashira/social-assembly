@@ -713,67 +713,92 @@ Acceptance criteria:
 
 security WARN (findings=3)
 
-## qa — qa @ 2026-06-05T04:46:25.111627Z
+## qa — qa @ 2026-06-05T05:27:50.336758Z
 
-PASS: Creating comprehensive TDD test plan for Nginx configuration documentation
+PASS: 
 
-## 1. Acceptance criteria
-- Nginx configuration file exists at `/opt/axentx/social-assembly/docs/nginx-example.conf`
-- Configuration includes SSL/TLS settings with proper certificate paths
-- Configuration includes reverse proxy directives for the social-assembly application
-- Configuration includes database connection settings and environment variables
-- Configuration follows security best practices (no hardcoded credentials, proper headers)
-- Configuration includes explanatory comments for each major section
-- Configuration passes Nginx syntax validation (`nginx -t`)
+1. **Acceptance criteria**
+* The deployment guide includes a comprehensive section on database setup, covering database selection, installation, and configuration
+* The deployment guide includes a detailed section on reverse proxy setup with examples for both Nginx and Traefik, covering installation and configuration
+* The deployment guide includes instructions for SSL certificate setup with Let's Encrypt, covering acquisition, installation, and configuration
+* An example Nginx configuration file is added to docs/nginx-example.conf with server block, listen directives, and location blocks
+* An example Traefik configuration file is added to docs/traefik-example.toml with entry points, routers, and services
+* The troubleshooting section addresses common issues: database connection problems, reverse proxy misconfigurations, and SSL certificate errors
+* The SSL configuration includes proper security headers and redirect rules for HTTP to HTTPS
 
-## 2. Unit tests
+2. **Unit tests**
 ```javascript
-// File: nginx-config.test.js
-const fs = require('fs');
-const path = require('path');
-
-describe('Nginx Configuration', () => {
-  const nginxConfigPath = '/opt/axentx/social-assembly/docs/nginx-example.conf';
+// Test nginx example config file exists and has correct structure
+describe('Nginx Example Config', () => {
+  const fs = require('fs');
+  const path = '/opt/axentx/social-assembly/docs/nginx-example.conf';
   
-  test('Nginx config file exists', () => {
-    expect(fs.existsSync(nginxConfigPath)).toBe(true);
+  test('should exist at correct path', () => {
+    expect(fs.existsSync(path)).toBe(true);
   });
-
-  test('Contains SSL/TLS configuration', () => {
-    const config = fs.readFileSync(nginxConfigPath, 'utf8');
-    expect(config).toMatch(/ssl_certificate/);
-    expect(config).toMatch(/ssl_certificate_key/);
-    expect(config).toMatch(/ssl_protocols/);
+  
+  test('should contain required nginx directives', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('server {');
+    expect(content).toContain('listen 80;');
+    expect(content).toContain('listen 443 ssl http2;');
+    expect(content).toContain('location / {');
+    expect(content).toContain('location /api/ {');
+    expect(content).toContain('location /static/ {');
   });
+});
 
-  test('Contains reverse proxy settings', () => {
-    const config = fs.readFileSync(nginxConfigPath, 'utf8');
-    expect(config).toMatch(/proxy_pass/);
-    expect(config).toMatch(/proxy_set_header/);
+// Test traefik example config file exists and has correct structure
+describe('Traefik Example Config', () => {
+  const fs = require('fs');
+  const path = '/opt/axentx/social-assembly/docs/traefik-example.toml';
+  
+  test('should exist at correct path', () => {
+    expect(fs.existsSync(path)).toBe(true);
   });
-
-  test('Contains database connection settings', () => {
-    const config = fs.readFileSync(nginxConfigPath, 'utf8');
-    expect(config).toMatch(/DATABASE_URL/);
-    expect(config).toMatch(/environment variables/);
+  
+  test('should contain required traefik configuration', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('[entryPoints]');
+    expect(content).toContain('[http.routers]');
+    expect(content).toContain('[http.services]');
+    expect(content).toContain('entryPoint = "websecure"');
+    expect(content).toContain('rule = "Host(`example.com`)');
   });
+});
 
-  test('Follows security best practices', () => {
-    const config = fs.readFileSync(nginxConfigPath, 'utf8');
-    expect(config).toMatch(/X-Frame-Options/);
-    expect(config).toMatch(/X-Content-Type-Options/);
-    expect(config).not.toMatch(/server_tokens\s+on/);
+// Test deployment guide contains all required sections
+describe('Deployment Guide Content', () => {
+  const fs = require('fs');
+  const path = '/opt/axentx/social-assembly/docs/deployment-guide.md';
+  
+  test('should contain database setup section', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('# Database Setup');
+    expect(content).toContain('database selection');
+    expect(content).toContain('database installation');
+    expect(content).toContain('database configuration');
   });
-
-  test('Has explanatory comments', () => {
-    const config = fs.readFileSync(nginxConfigPath, 'utf8');
-    expect(config).toMatch(/# SSL Configuration/);
-    expect(config).toMatch(/# Reverse Proxy/);
-    expect(config).toMatch(/# Database Settings/);
+  
+  test('should contain reverse proxy section with nginx and traefik examples', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('# Reverse Proxy Setup');
+    expect(content).toContain('Nginx Configuration');
+    expect(content).toContain('Traefik Configuration');
   });
-
-  test('Valid Nginx syntax', () => {
-    // This would be implemented with a shell command execution
-    // const result = execSync('nginx -t -c ' + nginxConfigPath);
-    // expect(result.toString()).toContain('syntax is ok');
-   
+  
+  test('should contain SSL section with Let\'s Encrypt instructions', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('# SSL Certificate Setup');
+    expect(content).toContain('Let\'s Encrypt');
+    expect(content).toContain('certificate acquisition');
+    expect(content).toContain('certificate installation');
+    expect(content).toContain('certificate configuration');
+  });
+  
+  test('should contain troubleshooting section', () => {
+    const content = fs.readFileSync(path, 'utf8');
+    expect(content).toContain('# Troubleshooting');
+    expect(content).toContain('database connection issues');
+    expect(content).toContain('reverse proxy issues');
+    expect(content).toC
