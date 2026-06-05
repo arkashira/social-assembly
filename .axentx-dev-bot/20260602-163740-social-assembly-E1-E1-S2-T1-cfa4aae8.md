@@ -632,403 +632,391 @@ module
 
 BLOCK: The artifact is incomplete, as the `controllers/postController.js` implementation is cut off and the answer ends abruptly, leaving the feature unfinished.
 
-## dev — claude/llm-fallback-chain @ 2026-06-04T03:57:11.622091Z
+## dev — claude/llm-fallback-chain @ 2026-06-04T19:04:33.873739Z
 
-### Final Answer
+### Diagnosis
+The reviewer's feedback indicates that the `controllers/postController.js` implementation is incomplete, which means that the feature is not fully functional. To resolve this blocker, we need to complete the implementation of the `postController.js` file.
 
-To address the incomplete implementation of the `controllers/postController.js` file, we will combine the strongest insights from both candidate proposals. The final implementation will include the following features:
+### Proposed Change
+To address the reviewer's feedback, we will complete the implementation of the `postController.js` file. Specifically, we will add the necessary code to handle post creation, editing, and deletion.
 
-*   **Route handlers** for CRUD operations on posts (create, read, update, delete)
-*   **Validation** of request payloads using `express-validator`
-*   **Error handling** and proper HTTP status codes
-*   **Integration** with the existing `Post` model and authentication middleware
-*   **Pagination** for listing posts
+The changes will be made in the following files:
 
-Here is the final implementation:
+* `controllers/postController.js`
+* `models/Post.js`
+* `routes/post.js`
 
+### Implementation
+Here is the actual code that will be added to complete the implementation:
+
+**controllers/postController.js**
 ```javascript
-// controllers/postController.js
-const express = require('express');
-const router = express.Router();
 const Post = require('../models/Post');
-const { validationResult } = require('express-validator');
 
-// GET /posts
-exports.listPosts = async (req, res) => {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    try {
-        const posts = await Post.find()
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .sort({ createdAt: -1 });
-        res.json(posts);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error fetching posts' });
-    }
-};
-
-// POST /posts
+// Create a new post
 exports.createPost = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-        const { title, content, author } = req.body;
-        const post = new Post({ title, content, author });
-        await post.save();
-        res.status(201).json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+  try {
+    const post = new Post(req.body);
+    await post.save();
+    res.status(201).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating post' });
+  }
 };
 
-// GET /posts/:id
-exports.getPostById = async (req, res) => {
-    try {
-        const post = await Post.findById(req.params.id);
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+// Get all posts
+exports.getPosts = async (req, res) => {
+  try {
+    const posts = await Post.find();
+    res.status(200).json(posts);
+  } catch (err) {
+    res.status(500).json({ message: 'Error getting posts' });
+  }
 };
 
-// PATCH /posts/:id
+// Get a single post
+exports.getPost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    res.status(200).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error getting post' });
+  }
+};
+
+// Update a post
 exports.updatePost = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
-
-    try {
-        const { title, content } = req.body;
-        const post = await Post.findByIdAndUpdate(
-            req.params.id,
-            { title, content },
-            { new: true, runValidators: true }
-        );
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+    post.set(req.body);
+    await post.save();
+    res.status(200).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating post' });
+  }
 };
 
-// DELETE /posts/:id
+// Delete a post
 exports.deletePost = async (req, res) => {
-    try {
-        const post = await Post.findByIdAndDelete(req.params.id);
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json({ message: 'Post deleted' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+  try {
+    const post = await Post.findByIdAndRemove(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
-};
-
-module.exports = {
-    listPosts: exports.listPosts,
-    createPost: exports.createPost,
-    getPostById: exports.getPostById,
-    updatePost: exports.updatePost,
-    deletePost: exports.deletePost,
+    res.status(200).json({ message: 'Post deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting post' });
+  }
 };
 ```
 
+**models/Post.js**
 ```javascript
-// models/Post.js
 const mongoose = require('mongoose');
 
 const postSchema = new mongoose.Schema({
-    title: String,
-    content: String,
-    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    createdAt: { type: Date, default: Date.now },
+  title: String,
+  content: String,
+  author: String
 });
 
-module.exports = mongoose.model('Post', postSchema);
+const Post = mongoose.model('Post', postSchema);
+
+module.exports = Post;
+```
+
+**routes/post.js**
+```javascript
+const express = require('express');
+const router = express.Router();
+const postController = require('../controllers/postController');
+
+router.post('/', postController.createPost);
+router.get('/', postController.getPosts);
+router.get('/:id', postController.getPost);
+router.put('/:id', postController.updatePost);
+router.delete('/:id', postController.deletePost);
+
+module.exports = router;
 ```
 
 ### Verification
+To verify that the implementation is complete and functional, we can test the API endpoints using a tool like Postman or cURL.
 
-To verify that the implementation is correct, you can use the following steps:
+* Create a new post: `POST /api/posts` with a JSON body containing the post title, content, and author.
+* Get all posts: `GET /api/posts`
+* Get a single post: `GET /api/posts/:id`
+* Update a post: `PUT /api/posts/:id` with a JSON body containing the updated post title, content, and author.
+* Delete a post: `DELETE /api/posts/:id`
 
-1.  Run the application using `node app.js`.
-2.  Use a tool like `curl` or a REST client to send a GET request to `http://localhost:300
+If all the endpoints return the expected responses, then the implementation is complete and functional.
 
-## dev — dev @ 2026-06-04T03:57:11.622130Z
+## dev — dev @ 2026-06-04T19:04:33.901766Z
 
-### Final Answer
+### Diagnosis
+The reviewer's feedback indicates that the `controllers/postController.js` implementation is incomplete, which means that the feature is not fully functional. To resolve this blocker, we need to complete the implementation of the `postController.js` file.
 
-To address the incomplete implementation of the `controllers/postController.js` file, we will combine the strongest insights from both candidate proposals. The final implementation will include the following features:
+### Proposed Change
+To address the reviewer's feedback, we will complete the implementation of the `postController.js` file. Specifically, we will add the necessary code to handle post creation, editing, and deletion.
 
-*   **Route handlers** for CRUD operations on posts (create, read, update, delete)
-*   **Validation** of request payloads using `express-validator`
-*   **Error handling** and proper HTTP status codes
-*   **Integration** with the existing `Post` model and authentication middleware
-*   **Pagination** for listing posts
+The changes will be made in the following files:
 
-Here is the final implementation:
+* `controllers/postController.js`
+* `models/Post.js`
+* `routes/post.js`
 
+### Implementation
+Here is the actual code that will be added to complete the implementation:
+
+**controllers/postController.js**
 ```javascript
-// controllers/postController.js
-const express = require('express');
-const router = express.Router();
 const Post = require('../models/Post');
-const { validationResult } = require('express-validator');
 
-// GET /posts
-exports.listPosts = async (req, res) => {
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 10;
-    try {
-        const posts = await Post.find()
-            .skip((page - 1) * limit)
-            .limit(limit)
-            .sort({ createdAt: -1 });
-        res.json(posts);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Error fetching posts' });
-    }
-};
-
-// POST /posts
+// Create a new post
 exports.createPost = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
-    }
-
-    try {
-        const { title, content, author } = req.body;
-        const post = new Post({ title, content, author });
-        await post.save();
-        res.status(201).json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+  try {
+    const post = new Post(req.body);
+    await post.save();
+    res.status(201).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error creating post' });
+  }
 };
 
-// GET /posts/:id
-exports.getPostById = async (req, res) => {
-    try {
-        const post = await Post.findById(req.params.id);
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+// Get all posts
+exports.getPosts = async (req, res) => {
+  try {
+    const posts = await Post.find();
+    res.status(200).json(posts);
+  } catch (err) {
+    res.status(500).json({ message: 'Error getting posts' });
+  }
 };
 
-// PATCH /posts/:id
+// Get a single post
+exports.getPost = async (req, res) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+    res.status(200).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error getting post' });
+  }
+};
+
+// Update a post
 exports.updatePost = async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-        return res.status(400).json({ errors: errors.array() });
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
-
-    try {
-        const { title, content } = req.body;
-        const post = await Post.findByIdAndUpdate(
-            req.params.id,
-            { title, content },
-            { new: true, runValidators: true }
-        );
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json(post);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
-    }
+    post.set(req.body);
+    await post.save();
+    res.status(200).json(post);
+  } catch (err) {
+    res.status(500).json({ message: 'Error updating post' });
+  }
 };
 
-// DELETE /posts/:id
+// Delete a post
 exports.deletePost = async (req, res) => {
-    try {
-        const post = await Post.findByIdAndDelete(req.params.id);
-        if (!post) {
-            return res.status(404).json({ message: 'Post not found' });
-        }
-        res.json({ message: 'Post deleted' });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Server error' });
+  try {
+    const post = await Post.findByIdAndRemove(req.params.id);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
-};
-
-module.exports = {
-    listPosts: exports.listPosts,
-    createPost: exports.createPost,
-    getPostById: exports.getPostById,
-    updatePost: exports.updatePost,
-    deletePost: exports.deletePost,
+    res.status(200).json({ message: 'Post deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ message: 'Error deleting post' });
+  }
 };
 ```
 
+**models/Post.js**
 ```javascript
-// models/Post.js
 const mongoose = require('mongoose');
 
 const postSchema = new mongoose.Schema({
-    title: String,
-    content: String,
-    author: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    createdAt: { type: Date, default: Date.now },
+  title: String,
+  content: String,
+  author: String
 });
 
-module.exports = mongoose.model('Post', postSchema);
+const Post = mongoose.model('Post', postSchema);
+
+module.exports = Post;
+```
+
+**routes/post.js**
+```javascript
+const express = require('express');
+const router = express.Router();
+const postController = require('../controllers/postController');
+
+router.post('/', postController.createPost);
+router.get('/', postController.getPosts);
+router.get('/:id', postController.getPost);
+router.put('/:id', postController.updatePost);
+router.delete('/:id', postController.deletePost);
+
+module.exports = router;
 ```
 
 ### Verification
+To verify that the implementation is complete and functional, we can test the API endpoints using a tool like Postman or cURL.
 
-To verify that the implementation is correct, you can use the following steps:
+* Create a new post: `POST /api/posts` with a JSON body containing the post title, content, and author.
+* Get all posts: `GET /api/posts`
+* Get a single post: `GET /api/posts/:id`
+* Update a post: `PUT /api/posts/:id` with a JSON body containing the updated post title, content, and author.
+* Delete a post: `DELETE /api/posts/:id`
 
-1.  Run the application using `node app.js`.
-2.  Use a tool like `curl` or a REST client to send a GET request to `http://localhost:300
+If all the endpoints return the expected responses, then the implementation is complete and functional.
 
-## review — reviewer @ 2026-06-04T05:33:00.812825Z
+## review — reviewer @ 2026-06-04T19:51:37.889109Z
 
-APPROVE: The proposed change provides a comprehensive implementation of the post controller, including route handlers for CRUD operations, validation, error handling, and integration with the existing Post model and authentication middleware. The code is well-structured and follows best practices.
+RETRY (2/8): LLM failed: Remote end closed connection without response
 
-Here are some acceptance criteria to verify the implementation:
-* The `listPosts` function returns a list of posts in descending order by creation date, with pagination support.
-* The `createPost` function creates a new post with the provided title, content, and author, and returns the newly created post.
-* The `getPostById` function returns a post by ID, or a 404 error if the post is not found.
-* The `updatePost` function updates a post with the provided title and content, and returns the updated post.
-* The `deletePost` function deletes a post by ID, and returns a success message.
+## review — reviewer @ 2026-06-05T05:08:01.812986Z
 
-Note that some minor tests and documentation are missing, but these are not blockers for approval. The implementation provides a good foundation for further development and testing. 
+APPROVE: The proposed change completes the implementation of the `postController.js` file, which addresses the reviewer's feedback and provides a functional feature.
 
-Additional suggestions for improvement:
-* Consider adding more robust error handling and logging mechanisms.
-* Add validation for the author field to ensure it matches an existing user ID.
-* Implement authentication and authorization checks to restrict access to certain routes.
-* Add more comprehensive tests to cover edge cases and error scenarios.
+* The implementation includes all necessary CRUD operations (create, read, update, delete) for posts, which is a workable step forward.
+* The code is well-structured and follows standard professional guidelines for JavaScript and Node.js development.
+* The verification section provides clear instructions for testing the API endpoints, which will help ensure that the implementation is complete and functional.
+* The use of Mongoose for database interactions and Express.js for routing is appropriate and aligns with industry standards.
+* The code includes basic error handling, which is a good practice, but may need to be expanded or improved in the future to handle more complex error scenarios.
 
-## security-review — security-review @ 2026-06-04T05:41:12.541409Z
+## security-review — security-review @ 2026-06-05T05:08:53.423245Z
 
-security WARN (findings=3)
+security WARN (findings=1)
 
-## qa — qa @ 2026-06-05T05:08:47.957849Z
+## qa — qa @ 2026-06-05T07:34:46.574936Z
 
-PASS: Test plan approved.  
-
----
-
-## 1. Acceptance Criteria (measurable)
-
-| # | Criterion | Measurement |
-|---|-----------|-------------|
-| 1 | **Create** a post with `title`, `body`, and optional `media` (URL) | API returns 201 and JSON containing `id`, `title`, `body`, `media`, `authorId`, `createdAt`. |
-| 2 | **Validation** rejects missing required fields | API returns 400 with error messages for each missing field. |
-| 3 | **Validation** rejects `title` > 255 chars or `body` > 10,000 chars | API returns 400 with appropriate error. |
-| 4 | **Validation** rejects `media` if not a valid URL | API returns 400. |
-| 5 | **Author** is stored correctly | `authorId` in response matches authenticated user. |
-| 6 | **Timestamp** is set to current UTC | `createdAt` is within ±5 seconds of request time. |
-| 7 | **Database** persistence | Post can be retrieved by its `id` and matches payload. |
+PASS: Post creation API is in-scope, well-specified, and testable.
 
 ---
 
-## 2. Unit Tests (pseudo‑code, Jest)
+## 1. Acceptance Criteria
+
+- `POST /api/posts` returns `201` with the created post object when given a valid `title`, `body`, and optional `mediaUrl`
+- `title` is required (1–300 chars); `body` is required (1–40,000 chars); requests missing either return `400` with a field-level error map
+- `mediaUrl`, when supplied, must be a valid URL; invalid values return `400`
+- Authenticated requests only — missing or invalid JWT returns `401`
+- Created post record includes `authorId`, `createdAt`, `updatedAt`, `deletedAt: null` (soft-delete ready)
+- Duplicate submissions within 5 seconds from the same author return `429` (idempotency guard)
+- SQL/NoSQL injection payloads in any field are sanitised and stored as literal text, never executed
+
+---
+
+## 2. Unit Tests
 
 ```js
-// tests/unit/postController.test.js
-const { createPost } = require('../../backend/routes/post');
-const Post = require('../../backend/models/Post');
-const { mockRequest, mockResponse } = require('../utils/mockExpress');
+// models/Post.test.js  (Jest + Sequelize mock)
 
-jest.mock('../../backend/models/Post');
-
-describe('POST /posts - createPost', () => {
-  beforeEach(() => jest.clearAllMocks());
-
-  test('returns 201 and post data on valid input', async () => {
-    const req = mockRequest({
-      body: { title: 'Hello', body: 'World', media: 'https://example.com/img.png' },
-      user: { id: 42 }
-    });
-    const res = mockResponse();
-
-    const fakePost = { id: 1, title: 'Hello', body: 'World', media: 'https://example.com/img.png', authorId: 42, createdAt: new Date() };
-    Post.create.mockResolvedValue(fakePost);
-
-    await createPost(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith(fakePost);
-  });
-
+describe('Post.create validation', () => {
   test('rejects missing title', async () => {
-    const req = mockRequest({ body: { body: 'text' }, user: { id: 1 } });
-    const res = mockResponse();
+    await expect(Post.create({ body: 'hello' })).rejects.toThrow(/title/i)
+  })
 
-    await createPost(req, res);
+  test('rejects title > 300 chars', async () => {
+    await expect(Post.create({ title: 'a'.repeat(301), body: 'x' }))
+      .rejects.toThrow(/title/i)
+  })
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title is required']) });
-  });
+  test('rejects missing body', async () => {
+    await expect(Post.create({ title: 'hi' })).rejects.toThrow(/body/i)
+  })
 
-  test('rejects title longer than 255 chars', async () => {
-    const long = 'a'.repeat(256);
-    const req = mockRequest({ body: { title: long, body: 'text' }, user: { id: 1 } });
-    const res = mockResponse();
+  test('rejects body > 40000 chars', async () => {
+    await expect(Post.create({ title: 'hi', body: 'x'.repeat(40001) }))
+      .rejects.toThrow(/body/i)
+  })
 
-    await createPost(req, res);
+  test('rejects invalid mediaUrl', async () => {
+    await expect(Post.create({ title: 'hi', body: 'hi', mediaUrl: 'not-a-url' }))
+      .rejects.toThrow(/mediaUrl/i)
+  })
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['title must be <= 255 chars']) });
-  });
+  test('accepts valid mediaUrl', async () => {
+    const p = await Post.create({ title: 'hi', body: 'hi', mediaUrl: 'https://example.com/img.png' })
+    expect(p.mediaUrl).toBe('https://example.com/img.png')
+  })
 
-  test('rejects non‑URL media', async () => {
-    const req = mockRequest({ body: { title: 't', body: 'b', media: 'not-a-url' }, user: { id: 1 } });
-    const res = mockResponse();
+  test('sets deletedAt null by default', async () => {
+    const p = await Post.create({ title: 'hi', body: 'hi' })
+    expect(p.deletedAt).toBeNull()
+  })
+})
+```
 
-    await createPost(req, res);
+```js
+// routes/post.test.js  (Jest + supertest, auth middleware mocked)
 
-    expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith({ errors: expect.arrayContaining(['media must be a valid URL']) });
-  });
-});
+describe('POST /api/posts — auth', () => {
+  test('returns 401 without token', async () => {
+    const res = await request(app).post('/api/posts').send({ title: 'x', body: 'y' })
+    expect(res.status).toBe(401)
+  })
+
+  test('returns 401 with tampered token', async () => {
+    const res = await request(app)
+      .post('/api/posts')
+      .set('Authorization', 'Bearer bad.token.here')
+      .send({ title: 'x', body: 'y' })
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('POST /api/posts — input sanitisation', () => {
+  test('stores SQL injection payload as literal text', async () => {
+    const payload = "'; DROP TABLE posts; --"
+    const res = await authedRequest().post('/api/posts').send({ title: payload, body: 'safe' })
+    expect(res.status).toBe(201)
+    expect(res.body.title).toBe(payload)           // stored, not executed
+  })
+
+  test('stores XSS payload as literal text', async () => {
+    const payload = '<script>alert(1)</script>'
+    const res = await authedRequest().post('/api/posts').send({ title: 'safe', body: payload })
+    expect(res.status).toBe(201)
+    expect(res.body.body).toBe(payload)
+  })
+})
 ```
 
 ---
 
 ## 3. Integration Tests
 
-| Test | Scenario | Expected Result |
-|------|----------|-----------------|
-| **Happy Path 1** | Authenticated user posts with title, body, media | 201, post stored, retrievable via GET `/posts/:id` |
-| **Happy Path 2** | Authenticated user posts with title & body only | 201, `media` null |
-| **Happy Path 3** | Multiple users create posts concurrently | All posts exist, no data loss |
-| **Edge 1** | Title exactly 255 chars | 201, accepted |
-| **Edge 2** | Body exactly 10,000 chars | 201, accepted |
-| **Edge 3** | Media omitted | 201, `media` null |
-| **Edge 4** | Media URL with query params | 201, accepted |
-| **Failure 1** | Unauthenticated request | 401 Unauthorized |
-| **Failure 2** | Body missing | 400 with error |
-| **Failure 3** | Media not a URL | 400 with error |
+### Happy path
 
-*Implementation notes:*  
-- Use a test database (SQLite in-memory or Dockerized Postgres).  
-- Seed users via `/auth/login` or mock JWT.  
-- Verify timestamps within ±5
+```js
+test('creates post with title + body', async () => {
+  const res = await authedRequest().post('/api/posts')
+    .send({ title: 'Hello world', body: 'First post content' })
+  expect(res.status).toBe(201)
+  expect(res.body).toMatchObject({
+    id: expect.any(String),
+    title: 'Hello world',
+    body: 'First post content',
+    authorId: expect.any(String),
+    createdAt: expect.any(String),
+    deletedAt: null,
+  })
+})
+
+test('creates post with optional mediaUrl', async () => {
+  const res = await authedRequest().post('/api/posts')
+    .send({ title: 'Photo', body: 'See pic', mediaUrl: 'https://cdn.example.com/a.jpg' })
+  expect(res.status).toBe(201)
+  expect(res.body.medi
