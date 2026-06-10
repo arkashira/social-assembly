@@ -1,1 +1,23 @@
-   docker compose config   # prints the fully‑expanded config, catches syntax errors
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 123456..789012 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -1,5 +1,7 @@
+ version: '3'
+ services:
+   app:
+     build: .
+     environment:
+       - AXENTX_DB_USER=axentx
+       - AXENTX_DB_PASSWORD=secret
++      - AXENTX_DB_HOST=localhost
++      - AXENTX_DB_PORT=5432
+     ports:
+       - "8000:8000"
+     depends_on:
+       - db
+     healthcheck:
+       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+       interval: 1m
+       timeout: 3s
+       retries: 3
