@@ -1,0 +1,8 @@
+# Configuration File Example
+server:
+  port: 8080
+database:
+  username: socialassembly
+  password: password
+  host: localhost
+  port: 5432
